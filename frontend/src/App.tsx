@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import SmilesDrawer from "smiles-drawer";
 import {
   Activity,
   Atom,
@@ -22,7 +23,6 @@ import {
   getMapPoints,
   getStatus,
   searchMolecules,
-  structureSvgUrl,
 } from "./api";
 import { ChemicalMap } from "./components/ChemicalMap";
 import type { CompareResponse, IndexStatus, MapPoint, SearchFilters, SearchMode, SearchResponse, SearchResult } from "./types/molspace";
@@ -422,7 +422,7 @@ function DetailPanel({
         </div>
         <span className={`tox ${molecule.toxicity_flag}`}>{molecule.toxicity_flag}</span>
       </div>
-      <img className="structure-image" src={structureSvgUrl(molecule.molecule_id)} alt={`${molecule.name} molecular structure`} />
+      <MoleculeStructure smiles={molecule.canonical_smiles} name={molecule.name} />
       <div className="metric-grid">
         <Metric label="QED" value={molecule.qed.toFixed(2)} />
         <Metric label="MW" value={molecule.molecular_weight.toFixed(1)} />
@@ -451,6 +451,48 @@ function DetailPanel({
         <button onClick={() => onNegative(selectedId ?? molecule.molecule_id)}>Away</button>
       </div>
     </section>
+  );
+}
+
+function MoleculeStructure({ smiles, name }: { smiles: string; name: string }) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+
+    setError(null);
+    svgElement.innerHTML = "";
+
+    const drawer = new SmilesDrawer.SvgDrawer({
+      width: 340,
+      height: 220,
+      bondThickness: 1.6,
+      bondLength: 28,
+      padding: 18,
+      fontSizeLarge: 12,
+      fontSizeSmall: 5,
+      compactDrawing: true,
+      experimentalSSSR: true,
+    });
+
+    SmilesDrawer.parse(
+      smiles,
+      (tree: unknown) => {
+        drawer.draw(tree, svgElement, "light", false);
+      },
+      () => {
+        setError("Structure rendering unavailable for this SMILES");
+      },
+    );
+  }, [smiles]);
+
+  return (
+    <figure className="structure-card" aria-label={`${name} molecular structure`}>
+      <svg ref={svgRef} className="structure-svg" role="img" />
+      {error && <figcaption>{error}</figcaption>}
+    </figure>
   );
 }
 

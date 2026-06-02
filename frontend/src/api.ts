@@ -64,8 +64,3 @@ export async function exportShortlist(ids: string[], format: "json" | "csv") {
   }
   return response.blob();
 }
-
-export function structureSvgUrl(moleculeId: string) {
-  return `${API_BASE}/molecule/${encodeURIComponent(moleculeId)}/structure.svg`;
-}
-
