@@ -311,7 +311,3 @@ Molecule Space aligns with the Qdrant hackathon theme because it:
 - Bioactivity embeddings use a lightweight deterministic embedding approach for hackathon reliability.
 - ChemBERTa/MolFormer and million-scale indexing were intentionally excluded to keep the demo fast, reproducible, and deployable.
 
-## License
-
-Hackathon demo code. Add a project license before broader reuse.
-
