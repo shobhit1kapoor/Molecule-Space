@@ -1,0 +1,15 @@
+.venv/
+backend/.qdrant/
+backend/.pytest_cache/
+backend/__pycache__/
+backend/app/__pycache__/
+backend/tests/__pycache__/
+data/processed_molecules.json
+data/raw_chembl_activities.json
+logs/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+.env
+*.pyc

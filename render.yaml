@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: molecule-space-api
+    env: python
+    plan: starter
+    buildCommand: pip install --upgrade pip && pip install -r backend/requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend
+    healthCheckPath: /health
+    envVars:
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: MOLSPACE_COLLECTION
+        value: molspace_molecules
+      - key: MOLSPACE_MAX_RECORDS
+        value: "1000"
+      - key: MOLSPACE_AUTO_BUILD
+        value: "1"
+      - key: MOLSPACE_DISABLE_CHEMBL
+        value: "0"
+
+  - type: web
+    name: molecule-space-web
+    env: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+
