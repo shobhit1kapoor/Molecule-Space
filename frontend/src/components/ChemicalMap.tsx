@@ -42,6 +42,8 @@ export function ChemicalMap({
   const negatives = useMemo(() => new Set(negativeIds), [negativeIds]);
 
   const scales = useMemo(() => {
+    // Backend map coordinates are normalized here so the SVG stays responsive
+    // while preserving the relative chemical-space layout.
     const xDomain = d3.extent(points, (point) => point.x) as [number, number];
     const yDomain = d3.extent(points, (point) => point.y) as [number, number];
     return {
@@ -71,16 +73,19 @@ export function ChemicalMap({
       <svg className="chemical-map" viewBox={`0 0 ${width} ${height}`} role="img">
         <rect x="0" y="0" width={width} height={height} rx="8" />
         {heatmap &&
-          points.map((point) => (
-            <circle
-              key={`heat-${point.molecule_id}`}
-              cx={scales.x(point.x)}
-              cy={scales.y(point.y)}
-              r={18 + point.qed * 10}
-              fill={targetColors[point.target_class] ?? targetColors.other}
-              opacity={0.055}
-            />
-          ))}
+          points.map((point) => {
+            // Soft circles form a target-class density overlay without hiding points.
+            return (
+              <circle
+                key={`heat-${point.molecule_id}`}
+                cx={scales.x(point.x)}
+                cy={scales.y(point.y)}
+                r={18 + point.qed * 10}
+                fill={targetColors[point.target_class] ?? targetColors.other}
+                opacity={0.055}
+              />
+            );
+          })}
         {points.map((point) => {
           const matched = resultById.get(point.molecule_id);
           const isSelected = selectedId === point.molecule_id;
@@ -92,6 +97,7 @@ export function ChemicalMap({
             isPositive ? "#2e7d32" : isNegative ? "#b00020" : isSelected ? "#111827" : isShortlisted ? "#f59e0b" : "#ffffff";
           return (
             <g key={point.molecule_id} className="map-point-group">
+              {/* Search hits glow so the user can connect result cards to map neighborhoods. */}
               {matched && <circle cx={scales.x(point.x)} cy={scales.y(point.y)} r={radius + 10} className="result-glow" />}
               <circle
                 className="map-point"
@@ -118,4 +124,3 @@ export function ChemicalMap({
     </section>
   );
 }
-

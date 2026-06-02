@@ -10,6 +10,8 @@ from .config import BIOACTIVITY_DIM
 
 
 _vectorizer = HashingVectorizer(
+    # HashingVectorizer avoids model downloads and gives a deterministic
+    # bioactivity vector for target/activity text in a hackathon deployment.
     n_features=BIOACTIVITY_DIM,
     alternate_sign=False,
     norm=None,
@@ -19,6 +21,7 @@ _vectorizer = HashingVectorizer(
 
 
 def bioactivity_text(payload: dict[str, Any]) -> str:
+    """Build the text document that represents a molecule's biological context."""
     parts = [
         payload.get("name") or payload.get("molecule_id") or "unnamed molecule",
         payload.get("target_name") or "unknown target",
@@ -34,6 +37,7 @@ def bioactivity_text(payload: dict[str, Any]) -> str:
 
 
 def text_vector(text: str) -> list[float]:
+    """Convert target/activity text into a normalized vector for Qdrant."""
     arr = _vectorizer.transform([text]).toarray().astype(np.float32)[0]
     norm = float(np.linalg.norm(arr))
     if norm > 0:
@@ -48,4 +52,3 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
     if denom == 0 or math.isnan(denom):
         return 0.0
     return round(float(np.dot(a, b) / denom), 4)
-

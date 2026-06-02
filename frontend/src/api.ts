@@ -3,6 +3,7 @@ import type { CompareResponse, IndexStatus, MapPoint, SearchFilters, SearchMode,
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Shared JSON request helper keeps endpoint calls typed and consistent.
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -29,6 +30,7 @@ export function buildIndex(maxRecords = 1000, force = true) {
 }
 
 export function searchMolecules(query: string, mode: SearchMode, filters: SearchFilters, limit = 24) {
+  // Search mode controls which Qdrant vectors are used on the backend.
   return request<SearchResponse>("/search", {
     method: "POST",
     body: JSON.stringify({ query, mode, filters, limit }),
@@ -36,6 +38,7 @@ export function searchMolecules(query: string, mode: SearchMode, filters: Search
 }
 
 export function discoverMolecules(query: string, positiveIds: string[], negativeIds: string[], filters: SearchFilters, limit = 24) {
+  // Positive and negative examples power the discovery steering workflow.
   return request<SearchResponse>("/discover", {
     method: "POST",
     body: JSON.stringify({ query, positive_ids: positiveIds, negative_ids: negativeIds, filters, limit }),

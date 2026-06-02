@@ -28,6 +28,7 @@ import { ChemicalMap } from "./components/ChemicalMap";
 import type { CompareResponse, IndexStatus, MapPoint, SearchFilters, SearchMode, SearchResponse, SearchResult } from "./types/molspace";
 
 const defaultFilters: SearchFilters = {
+  // Defaults favor drug-like demo candidates while still leaving room to explore.
   molecular_weight_min: null,
   molecular_weight_max: 500,
   logp_min: null,
@@ -64,6 +65,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Ready");
 
+  // Result lookup keeps map clicks, result cards, and the detail panel in sync.
   const resultById = useMemo(() => new Map((response?.results ?? []).map((result) => [result.molecule.molecule_id, result])), [response]);
   const selectedResult = selectedId ? resultById.get(selectedId) : response?.results[0];
   const targetClasses = useMemo(() => Array.from(new Set(mapPoints.map((point) => point.target_class))).sort(), [mapPoints]);
@@ -105,6 +107,7 @@ function App() {
     setBusy(true);
     if (userStarted) setMessage(`Running ${nextMode} search`);
     try {
+      // Target Shift reuses search but asks the backend to penalize same-class targets.
       const nextFilters = nextMode === "analog" ? { ...filters, different_target_class: true } : filters;
       const data = await searchMolecules(query, nextMode, nextFilters);
       setResponse(data);
@@ -122,6 +125,7 @@ function App() {
     setBusy(true);
     setMessage("Steering discovery through Qdrant context");
     try {
+      // Positive and negative baskets are sent to the backend to steer Qdrant retrieval.
       const data = await discoverMolecules(query, positiveIds, negativeIds, filters);
       setResponse(data);
       setSelectedId(data.results[0]?.molecule.molecule_id);
@@ -150,6 +154,7 @@ function App() {
 
   async function downloadShortlist(format: "json" | "csv") {
     if (!shortlistIds.length) return;
+    // Browser-side download keeps shortlist export simple and deployment-friendly.
     const blob = await exportShortlist(shortlistIds, format);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -477,6 +482,8 @@ function MoleculeStructure({ smiles, name }: { smiles: string; name: string }) {
       experimentalSSSR: true,
     });
 
+    // Render structures in the browser from SMILES so deployed demos do not
+    // depend on native RDKit graphics libraries being present on the server.
     SmilesDrawer.parse(
       smiles,
       (tree: unknown) => {

@@ -13,6 +13,8 @@ from .config import STRUCTURE_DIM
 RDLogger.DisableLog("rdApp.warning")
 
 KNOWN_NAME_TO_SMILES = {
+    # Demo anchors keep the live walkthrough reliable even when the user enters
+    # common names instead of raw SMILES strings.
     "aspirin": "CC(=O)Oc1ccccc1C(=O)O",
     "ibuprofen": "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O",
     "acetaminophen": "CC(=O)Nc1ccc(O)cc1",
@@ -48,6 +50,7 @@ def resolve_name_or_smiles(query: str) -> str:
 
 
 def compute_descriptors(smiles: str) -> dict[str, Any]:
+    """Compute small-molecule descriptors used for filtering and reranking."""
     mol = mol_from_smiles(smiles)
     molecular_weight = float(Descriptors.MolWt(mol))
     logp = float(Crippen.MolLogP(mol))
@@ -71,12 +74,15 @@ def compute_descriptors(smiles: str) -> dict[str, Any]:
 
 @lru_cache(maxsize=20000)
 def fingerprint_bits(smiles: str) -> tuple[int, ...]:
+    """Return active Morgan fingerprint bits for a canonical SMILES string."""
     mol = mol_from_smiles(smiles)
     bit_vect = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=STRUCTURE_DIM)
     return tuple(int(bit) for bit in bit_vect.GetOnBits())
 
 
 def structure_vector(smiles: str) -> list[float]:
+    # Dense structure vectors are normalized Morgan fingerprints so Qdrant can
+    # compare molecules with cosine distance.
     vec = np.zeros((STRUCTURE_DIM,), dtype=np.float32)
     for bit in fingerprint_bits(smiles):
         vec[bit] = 1.0
@@ -87,6 +93,7 @@ def structure_vector(smiles: str) -> list[float]:
 
 
 def sparse_fingerprint(smiles: str) -> tuple[list[int], list[float]]:
+    # Sparse vectors preserve the active bit ids for Qdrant sparse/hybrid search.
     bits = list(fingerprint_bits(smiles))
     return bits, [1.0] * len(bits)
 
@@ -102,6 +109,8 @@ def tanimoto_similarity(smiles_a: str, smiles_b: str) -> float:
 def molecule_svg(smiles: str, size: tuple[int, int] = (360, 260)) -> str:
     mol = mol_from_smiles(smiles)
     try:
+        # RDKit drawing works locally; the frontend also has a browser renderer
+        # so serverless deployments are not blocked by native graphics libraries.
         from rdkit.Chem.Draw import rdMolDraw2D
 
         drawer = rdMolDraw2D.MolDraw2DSVG(size[0], size[1])
@@ -121,6 +130,7 @@ def molecule_svg(smiles: str, size: tuple[int, int] = (360, 260)) -> str:
 
 
 def toxicity_flag(descriptors: dict[str, Any]) -> str:
+    """Simple hackathon heuristic for screening risk; not a clinical toxicity model."""
     if descriptors["lipinski_violations"] >= 2 or descriptors["molecular_weight"] > 650 or descriptors["logp"] > 6:
         return "high"
     if descriptors["lipinski_violations"] == 1 or descriptors["logp"] > 4.5 or descriptors["qed"] < 0.35:

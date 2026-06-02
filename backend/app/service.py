@@ -34,6 +34,7 @@ from .vectorize import bioactivity_text, cosine_similarity, text_vector
 
 
 def build_index(max_records: int = config.DEFAULT_MAX_RECORDS, force: bool = False) -> dict[str, Any]:
+    """Build the demo molecule dataset and upload it into the Qdrant collection."""
     client, mode = get_client()
     if force or not collection_exists(client):
         recreate_collection(client)
@@ -62,6 +63,8 @@ def status() -> IndexStatus:
 
 
 def ensure_index_ready() -> None:
+    # API endpoints call this so a fresh deployment can self-heal if the
+    # collection has not been created yet.
     current = status()
     if current.exists and current.count > 0:
         return
@@ -69,6 +72,7 @@ def ensure_index_ready() -> None:
 
 
 def resolve_molecule(query: str) -> dict[str, Any]:
+    """Resolve a user query to an indexed molecule or a parsed SMILES query."""
     ensure_index_ready()
     payloads = _all_payloads()
     text = query.strip().lower()
@@ -117,6 +121,8 @@ def search(request: SearchRequest) -> dict[str, Any]:
 
     client, qdrant_mode = get_client()
     candidate_limit = max(request.limit * 6, 80)
+    # Retrieve a wider candidate pool from Qdrant, then rerank in Python with
+    # chemistry-specific signals that are easy to explain in the UI.
     exclude = [int(query_payload["point_id"])] if int(query_payload.get("point_id", -1)) > 0 else []
     if request.mode == "structure":
         hits = query_dense(client, query_structure, "structure", request.filters, candidate_limit, offset_ids=exclude)
@@ -162,6 +168,8 @@ def discover(request: DiscoveryRequest) -> dict[str, Any]:
     positives = [id_map[mol_id] for mol_id in request.positive_ids if mol_id in id_map]
     negatives = [id_map[mol_id] for mol_id in request.negative_ids if mol_id in id_map]
 
+    # Discovery steering moves the query vector toward positive examples and
+    # away from negative examples before asking Qdrant for a new neighborhood.
     steered_structure = _steer_vector(base_structure, positives, negatives, "structure").tolist()
     steered_bioactivity = _steer_vector(base_bioactivity, positives, negatives, "bioactivity").tolist()
     sparse_indices, sparse_values = sparse_fingerprint(query_smiles)
@@ -202,6 +210,8 @@ def _try_context_discovery(client: Any, positives: list[dict[str, Any]], negativ
     if not positives:
         return []
     try:
+        # Prefer Qdrant's discovery/context query when supported by the active
+        # server; the caller falls back to steered hybrid search if unavailable.
         positive_ids = [int(item["point_id"]) for item in positives]
         negative_ids = [int(item["point_id"]) for item in negatives]
         context = [
@@ -222,6 +232,7 @@ def _try_context_discovery(client: Any, positives: list[dict[str, Any]], negativ
 
 
 def compare(left_id: str, right_id: str) -> dict[str, Any]:
+    """Compare two indexed molecules across structure, bioactivity, descriptors, and map position."""
     ensure_index_ready()
     payloads = _payload_map()
     if left_id not in payloads or right_id not in payloads:
@@ -330,6 +341,8 @@ def _rank_hits(
             final_score = 0.15 * structure_sim + 0.70 * bio_sim + 0.15 * float(payload.get("qed", 0))
         else:
             final_score = 0.45 * structure_sim + 0.35 * bio_sim + 0.15 * float(payload.get("qed", 0)) - 0.05 * toxicity_penalty
+        # Target-shift mode rewards candidates that stay chemically relevant
+        # while moving into a different biological target class.
         final_score -= same_target_penalty
         conflict = _conflict_badge(structure_sim, bio_sim)
         ranked.append(
@@ -348,6 +361,7 @@ def _rank_hits(
 
 
 def _conflict_badge(structure_sim: float, bio_sim: float) -> str | None:
+    """Label candidates where structure and bioactivity signals disagree in an interesting way."""
     if structure_sim >= 0.35 and bio_sim < 0.22:
         return "structure-close bioactivity-distant"
     if bio_sim >= 0.48 and structure_sim < 0.2:
@@ -371,6 +385,8 @@ def _why(payload: dict[str, Any], structure_sim: float, bio_sim: float, conflict
 
 
 def _qdrant_panel(qdrant_mode: str, query: str, filters: SearchFilters, candidates: int, returned: int) -> dict[str, Any]:
+    # This object feeds the UI transparency panel so judges can see exactly how
+    # Qdrant was used for the current search.
     return {
         "engine": "Qdrant",
         "mode": qdrant_mode,
@@ -386,6 +402,7 @@ def _qdrant_panel(qdrant_mode: str, query: str, filters: SearchFilters, candidat
 
 
 def _steer_vector(base: np.ndarray, positives: list[dict[str, Any]], negatives: list[dict[str, Any]], vector_key: str) -> np.ndarray:
+    """Create a normalized query vector shifted by positive and negative examples."""
     vector_field = f"{vector_key}_vector"
     pos_vectors = [np.array(item[vector_field], dtype=np.float32) for item in positives if vector_field in item]
     neg_vectors = [np.array(item[vector_field], dtype=np.float32) for item in negatives if vector_field in item]
@@ -451,4 +468,3 @@ def _payload_map() -> dict[str, dict[str, Any]]:
         mapping[str(payload.get("molecule_id"))] = payload
         mapping[str(payload.get("name", "")).lower()] = payload
     return mapping
-

@@ -10,6 +10,7 @@ from .schemas import SearchFilters
 
 
 def get_client() -> tuple[QdrantClient, str]:
+    """Create a Qdrant client for Cloud when credentials exist, otherwise local storage."""
     url = __import__("os").environ.get("QDRANT_URL")
     api_key = __import__("os").environ.get("QDRANT_API_KEY")
     if url:
@@ -28,6 +29,9 @@ def collection_exists(client: QdrantClient) -> bool:
 def recreate_collection(client: QdrantClient) -> None:
     if collection_exists(client):
         client.delete_collection(config.COLLECTION_NAME)
+    # Qdrant is the main retrieval engine: two named dense vectors capture
+    # complementary similarity spaces, while the sparse vector stores active
+    # fingerprint bits for hybrid chemical matching.
     client.create_collection(
         collection_name=config.COLLECTION_NAME,
         vectors_config={
@@ -42,6 +46,7 @@ def recreate_collection(client: QdrantClient) -> None:
 
 
 def _create_payload_indexes(client: QdrantClient) -> None:
+    # Payload indexes make filters fast enough for interactive demo searches.
     index_specs = [
         ("target_class", models.PayloadSchemaType.KEYWORD),
         ("toxicity_flag", models.PayloadSchemaType.KEYWORD),
@@ -64,6 +69,8 @@ def upsert_molecules(client: QdrantClient, records: list[dict[str, Any]], batch_
         for record in batch:
             payload = public_payload(record)
             points.append(
+                # Each Qdrant point combines vectors for retrieval with payload
+                # metadata for filtering, explanations, map rendering, and export.
                 models.PointStruct(
                     id=int(record["point_id"]),
                     vector={
@@ -86,6 +93,7 @@ def public_payload(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_filter(filters: SearchFilters | None) -> models.Filter | None:
+    """Translate UI filter controls into Qdrant payload filter conditions."""
     if filters is None:
         return None
     must: list[models.Condition] = []
@@ -151,6 +159,8 @@ def query_hybrid(
 ) -> list[Any]:
     query_filter = build_filter(filters)
     try:
+        # Hybrid search asks Qdrant for candidates from structure, bioactivity,
+        # and sparse fingerprint spaces, then fuses the candidate lists with RRF.
         response = client.query_points(
             collection_name=config.COLLECTION_NAME,
             prefetch=[
@@ -170,12 +180,15 @@ def query_hybrid(
         )
         return list(response.points)
     except Exception:
+        # Older/local Qdrant clients may not expose the full hybrid API, so the
+        # app keeps the demo reliable by falling back to client-side RRF.
         structure_hits = query_dense(client, structure, "structure", filters, limit * 3)
         bio_hits = query_dense(client, bioactivity, "bioactivity", filters, limit * 3)
         return reciprocal_rank_fusion([structure_hits, bio_hits], limit)
 
 
 def reciprocal_rank_fusion(hit_lists: list[list[Any]], limit: int, k: int = 60) -> list[Any]:
+    """Merge multiple ranked hit lists without requiring scores on the same scale."""
     scored: dict[int, tuple[float, Any]] = {}
     for hits in hit_lists:
         for rank, hit in enumerate(hits, start=1):
@@ -213,4 +226,3 @@ def count_points(client: QdrantClient) -> int:
         return int(client.count(config.COLLECTION_NAME, exact=True).count)
     except Exception:
         return len(scroll_payloads(client))
-

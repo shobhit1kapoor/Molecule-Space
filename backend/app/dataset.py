@@ -22,6 +22,8 @@ from .vectorize import bioactivity_text, text_vector
 
 
 ANCHORS: list[dict[str, Any]] = [
+    # Recognizable anchor molecules make the demo predictable and let users
+    # search by familiar names while still mixing in ChEMBL-derived records.
     {
         "molecule_id": "CHEMBL25",
         "name": "Aspirin",
@@ -171,6 +173,7 @@ def infer_target_class(target_name: str) -> str:
 
 
 def fetch_chembl_activities(max_records: int) -> list[dict[str, Any]]:
+    """Fetch a compact ChEMBL activity slice for the hackathon-sized index."""
     if config.DISABLE_CHEMBL:
         return []
     url = "https://www.ebi.ac.uk/chembl/api/data/activity.json"
@@ -251,6 +254,7 @@ def _safe_float(value: Any) -> float | None:
 
 
 def load_or_build_records(max_records: int, force: bool = False) -> list[dict[str, Any]]:
+    """Load cached processed molecules or rebuild descriptors/vectors from source data."""
     if config.PROCESSED_PATH.exists() and not force:
         return json.loads(config.PROCESSED_PATH.read_text(encoding="utf-8"))
 
@@ -280,6 +284,8 @@ def _merge_anchor_records(fetched: list[dict[str, Any]], max_records: int) -> li
 
 
 def _expand_fallback_if_needed(records: list[dict[str, Any]], max_records: int) -> list[dict[str, Any]]:
+    # If ChEMBL is unavailable, generate deterministic demo analogs so the
+    # application remains usable offline and during live judging.
     if len(records) >= min(max_records, 40):
         return records
     rng = random.Random(42)
@@ -300,6 +306,8 @@ def _process_records(raw_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     structure_vectors: list[list[float]] = []
     for index, row in enumerate(raw_records, start=1):
         try:
+            # This is where raw source rows become Qdrant-ready molecules:
+            # descriptors, dense vectors, sparse fingerprint bits, and payload.
             canonical = canonicalize_smiles(row["canonical_smiles"])
             descriptors = compute_descriptors(canonical)
             dense_structure = structure_vector(canonical)
@@ -344,6 +352,8 @@ def _process_records(raw_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _compute_map_coordinates(vectors: list[list[float]]) -> list[tuple[float, float]]:
+    # The map is a lightweight 2D projection of structure vectors for visual
+    # exploration. It is for navigation, not a scientific UMAP claim.
     if not vectors:
         return []
     arr = np.array(vectors, dtype=np.float32)
@@ -358,6 +368,8 @@ def _compute_map_coordinates(vectors: list[list[float]]) -> list[tuple[float, fl
 
 
 def _compute_crowdedness(coords: list[tuple[float, float]]) -> list[dict[str, Any]]:
+    # Crowdedness estimates local map density so candidates can be labeled as
+    # known-region, border-region, or sparse-region.
     if not coords:
         return []
     arr = np.array(coords, dtype=np.float32)

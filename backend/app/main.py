@@ -30,6 +30,8 @@ from .service import (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # In local/demo mode the API can build the Qdrant index automatically.
+    # Production uses the existing Qdrant Cloud collection for faster startup.
     if config.AUTO_BUILD:
         current = status()
         if not current.exists or current.count == 0:
@@ -46,6 +48,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
+    # Localhost supports development; the regex allows the deployed Vercel UI.
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"],
     allow_origin_regex=r"(http://(localhost|127\.0\.0\.1):\d+|https://.*\.vercel\.app)",
     allow_credentials=True,
@@ -88,11 +91,13 @@ def molecule_structure_svg(molecule_id: str) -> Response:
 
 @app.post("/search")
 def molecule_search(request: SearchRequest) -> dict[str, object]:
+    # Main retrieval endpoint: structure, bioactivity, hybrid, and target-shift modes.
     return search(request)
 
 
 @app.post("/discover")
 def molecule_discover(request: DiscoveryRequest) -> dict[str, object]:
+    # Interactive steering endpoint using positive/negative examples.
     return discover(request)
 
 
@@ -108,6 +113,7 @@ def chemical_map_points() -> list[dict[str, object]]:
 
 @app.get("/qdrant/summary")
 def qdrant_engine_summary() -> dict[str, object]:
+    # Exposes Qdrant collection details for the transparency panel and README checks.
     return qdrant_summary()
 
 
