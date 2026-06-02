@@ -7,6 +7,9 @@ backend/tests/__pycache__/
 data/processed_molecules.json
 data/raw_chembl_activities.json
 logs/
+.vercel/
+frontend/.vercel/
+backend/.vercel/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
