@@ -6,7 +6,6 @@ from typing import Any
 import numpy as np
 from rdkit import Chem, DataStructs, RDLogger
 from rdkit.Chem import AllChem, Crippen, Descriptors, Lipinski, QED, rdMolDescriptors
-from rdkit.Chem.Draw import rdMolDraw2D
 
 from .config import STRUCTURE_DIM
 
@@ -102,11 +101,23 @@ def tanimoto_similarity(smiles_a: str, smiles_b: str) -> float:
 
 def molecule_svg(smiles: str, size: tuple[int, int] = (360, 260)) -> str:
     mol = mol_from_smiles(smiles)
-    drawer = rdMolDraw2D.MolDraw2DSVG(size[0], size[1])
-    rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol)
-    drawer.FinishDrawing()
-    svg = drawer.GetDrawingText()
-    return svg.replace("svg:", "")
+    try:
+        from rdkit.Chem.Draw import rdMolDraw2D
+
+        drawer = rdMolDraw2D.MolDraw2DSVG(size[0], size[1])
+        rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol)
+        drawer.FinishDrawing()
+        svg = drawer.GetDrawingText()
+        return svg.replace("svg:", "")
+    except Exception:
+        escaped = smiles.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return f"""<svg width="{size[0]}" height="{size[1]}" viewBox="0 0 {size[0]} {size[1]}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="white"/>
+  <circle cx="{size[0] / 2:.0f}" cy="{size[1] / 2 - 20:.0f}" r="42" fill="none" stroke="#08a7a8" stroke-width="12"/>
+  <line x1="{size[0] / 2 + 30:.0f}" y1="{size[1] / 2 + 10:.0f}" x2="{size[0] / 2 + 92:.0f}" y2="{size[1] / 2 + 72:.0f}" stroke="#08a7a8" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="{size[0] / 2 + 108:.0f}" cy="{size[1] / 2 + 88:.0f}" r="20" fill="none" stroke="#08a7a8" stroke-width="10"/>
+  <text x="50%" y="{size[1] - 24}" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#334155">{escaped[:42]}</text>
+</svg>"""
 
 
 def toxicity_flag(descriptors: dict[str, Any]) -> str:
